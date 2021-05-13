@@ -2,6 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from selenium import webdriver
+import time
+import concurrent.futures
+
+MAX_THREADS = 4
 #from urllib3.packages.six import X
 
 ########## Helper functions
@@ -20,7 +24,7 @@ def get_score(url_produit):
     NOVA = el[1].text[5:]
     Eco_Score = el[2].text[10:]
     driver.close()
-    return Nutri_Score, NOVA, Eco_Score
+    return Nutri_Score.replace('\n', ''), NOVA.replace('\n', ''), Eco_Score.replace('\n', '')
 
 # get characteristic produit
 def caracteristic_du_produit(soup):
@@ -122,9 +126,9 @@ def caracteristic_du_produit(soup):
     else:
         Pays_de_vente = ''
         
-    return Quantite, Conditionnement, Marques, Categories, Labels_certifications_recompenses,\
-            Origine_des_ingredient, Lieux_de_fabrication_ou_de_transformation, Code_de_tracabilite,\
-            Lien_vers_la_page_du_produit_sur_le_site_officiel_du_fabricant, Magasins, Pays_de_vente
+    return Quantite, Conditionnement.replace('\n', ''), Marques.replace('\n', ''), Categories.replace('\n', ''), Labels_certifications_recompenses.replace('\n', ''),\
+            Origine_des_ingredient.replace('\n', ''), Lieux_de_fabrication_ou_de_transformation.replace('\n', ''), Code_de_tracabilite.replace('\n', ''),\
+            Lien_vers_la_page_du_produit_sur_le_site_officiel_du_fabricant.replace('\n', ''), Magasins, Pays_de_vente.replace('\n', '')
 
 # ingredients_analysis
 def get_ingredients_analysis(soup):
@@ -183,7 +187,7 @@ def get_repere_nutrition(soup):
             Sel = ''
     except:
         Grasses, Acides, Sucres, Sel = '', '', '' , ''
-    return Grasses, Acides, Sucres, Sel
+    return Grasses.replace('\n', ''), Acides.replace('\n', ''), Sucres.replace('\n', ''), Sel.replace('\n', '')
 
 # Informations nutritionnelles
 def get_info_nutri(soup):
@@ -196,7 +200,7 @@ def get_info_nutri(soup):
         Energie_kcal = soup.find_all('tr', {'id':"nutriment_energy-kcal_tr"})[0].find_all('td', {'class':"nutriment_value"})[0].text.replace('\n','').replace('\t','').replace('\xa0','')
     except:
         Energie_kcal = ''
-    return Energie_kJ, Energie_kcal
+    return Energie_kJ.replace('\n', ''), Energie_kcal.replace('\n', '')
 
 # Impact environnemental
 def get_impact_environnemental(soup):
@@ -207,7 +211,7 @@ def get_impact_environnemental(soup):
     for elem in soup.find_all('img', {'style':"margin-bottom:1rem;max-width:100%"}):
         if 'Eco-score' in elem['alt']:
             impact = elem['alt'][9:].replace(' ', '')
-    return impact
+    return impact.replace('\n', '')
 
 ########## Core Functions
 def get_page(start=1,end=7981):
@@ -239,9 +243,9 @@ def get_produit(url_produit):
     r = requests.get(url)
     soup = BeautifulSoup(r.text, 'html.parser')
     # Name produit
-    name = soup.find('h1', {'itemprop' : "name"}).text.replace('\xa0', ' ')
+    name = soup.find('h1', {'itemprop' : "name"}).text.replace('\xa0', ' ').replace('\n', '')
     # Code barre
-    code_barre = soup.find('span', {'id' : "barcode"}).text 
+    code_barre = soup.find('span', {'id' : "barcode"}).text.replace('\n', '') 
     # Nutri_Score, NOVA, Eco_Score
     Nutri_Score, NOVA, Eco_Score = get_score(url)
     # Characteristic produit
@@ -261,19 +265,38 @@ def get_produit(url_produit):
     Energie_kJ, Energie_kcal = get_info_nutri(soup)
     # Impact environnemental
     Impact_environnemental = get_impact_environnemental(soup)
-    return name, code_barre, Nutri_Score, NOVA, Eco_Score, Quantite, Conditionnement, Marques, Categories, \
+    line = ';'.join([name, code_barre, Nutri_Score, NOVA, Eco_Score, Quantite, Conditionnement, Marques, Categories, \
         Labels_certifications_recompenses, Origine_des_ingredient, Lieux_de_fabrication_ou_de_transformation, \
         Code_de_tracabilite, Lien_vers_la_page_du_produit_sur_le_site_officiel_du_fabricant, Magasins, Pays_de_vente, \
-        ingredients, Grasses, Acides, Sucres, Sel, Categories_cochees, Energie_kJ, Energie_kcal, Impact_environnemental
+        ingredients, Grasses, Acides, Sucres, Sel, Categories_cochees, Energie_kJ, Energie_kcal, Impact_environnemental])
+    
+    with open('data.csv', "a", encoding='utf-8') as fh:
+        fh.write(line + '\n')
+    #print('ok')
+    #fh.close()    
+    time.sleep(0.25)
+
+def download_produit(story_urls):
+    threads = min(MAX_THREADS, len(story_urls))
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+        executor.map(get_produit, story_urls)
 
 def main():
-    pages = get_page(start=1,end=2)
-    list_produit = get_list_produits_page(url=pages[0])
-    print(list_produit[10])
-    for i in range(0,len(list_produit)):
-        print(get_produit(list_produit[i]))
+    pages = get_page(start=1,end=1001)
+    #print(pages)
+    list_produit = []
+    for page in pages:
+        list_produit.append(get_list_produits_page(url=page))
+    #print(list_produit)
+    for elem in list_produit:
+        download_produit(elem)
+    print(len(list_produit))
+    
 
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    print('Duration: {}'.format(time.time() - start_time))
 
-#print(get_produit(url_produit='produit/3057640257773/naturelle-volcanique-volvic'))
+#print(get_produit(url_produit='produit/3017620422003/nutella-ferrero'))
