@@ -6,7 +6,6 @@ import time
 import concurrent.futures
 
 MAX_THREADS = 4
-#from urllib3.packages.six import X
 
 ########## Helper functions
 
@@ -216,7 +215,6 @@ def get_impact_environnemental(soup):
 ########## Core Functions
 def get_page(start=1,end=7981):
     """
-
     time execution: 0m0,883s
     """
     list_pages = []
@@ -232,6 +230,7 @@ def get_list_produits_page(url):
     soup = BeautifulSoup(r.text, 'html.parser')
     list_produits = soup.find("div", { 'id' : "search_results" })
     list_produit_href = [elem['href'] for elem in list_produits.find_all('a', href=True)]
+    #time.sleep(0.1)
     return list_produit_href
 
 
@@ -272,27 +271,31 @@ def get_produit(url_produit):
     
     with open('data.csv', "a", encoding='utf-8') as fh:
         fh.write(line + '\n')
-    #print('ok')
-    #fh.close()    
-    time.sleep(0.25)
 
 def download_produit(story_urls):
-    threads = min(MAX_THREADS, len(story_urls))
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+    #threads = min(MAX_THREADS, len(story_urls))
+    #max_workers=threads
+    with concurrent.futures.ThreadPoolExecutor() as executor:
         executor.map(get_produit, story_urls)
 
 def main():
-    pages = get_page(start=1,end=1001)
-    #print(pages)
+    pages = get_page(start=13,end=20)
+    # print(pages)
     list_produit = []
-    for page in pages:
-        list_produit.append(get_list_produits_page(url=page))
-    #print(list_produit)
-    for elem in list_produit:
-        download_produit(elem)
-    print(len(list_produit))
     
+    # for page in pages[:10]:
+    #     list_produit.append(get_list_produits_page(url=page))
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        list_produit = executor.map(get_list_produits_page, pages)
+    # #print(list_produit)
+    # for elem in list_produit:
+    #     download_produit(elem)
+    # print(len(list_produit))
+    #print(list_produit)
+    for p in list_produit:
+        download_produit(p)
+    
+    # download_produit(list_produit)
 
 if __name__ == "__main__":
     start_time = time.time()
